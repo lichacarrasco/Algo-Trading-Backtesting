@@ -1,9 +1,9 @@
 ---
 title: "Taller de Tesis 1"
-subtitle: "Entrega 1"
 author: "Lisandro Carrasco"
 date: "2023-04-08"
 output: pdf_document
+subtitle: Entrega 1
 ---
 
 ```{r setup, include=FALSE}
@@ -37,7 +37,7 @@ Este proyecto, buscará *comparar el rendimiento que se hubiese obtenido operand
 
 El conjunto de datos a utilizar en el proyecto consta de la información básica de la cotización diario de las 10 acciones de mayor capitalización bursátil de Estados Unidos. Estas son las acciones de las empresas: Apple (AAPL), Microsoft (MSFT), Google (GOOGL), Amazon (AMZN), Berkshire Hathaway (BRK-A), NVIDIA (NVDA), Tesla (TSLA), Meta (META), Visa (V) y Exxon (XOM).
 
-```{r}
+```{r echo = FALSE}
 data <- read.csv(glue::glue(path, '/Output/data_entera.csv')) %>% 
   arrange(desc(Date)) %>% 
   select(-Adjusted)
@@ -57,11 +57,10 @@ A partir de estos valores, el análisis técnico confecciona nuevas métricas e 
 
 En este caso, la data utilizada tendrá un marco temporal diario, es decir, que se contará con una observación por día para cada acción.
 
-```{r}
+```{r echo = FALSE}
 msft <- data %>% 
   filter(Ticker == "MSFT") %>% 
-  arrange(desc(Date)) %>% 
-  select(-Adjusted)
+  arrange(desc(Date))
 
 knitr::kable(x = head(msft, 5), align = "lcccccc")
 ```
@@ -69,5 +68,10 @@ knitr::kable(x = head(msft, 5), align = "lcccccc")
 La data en cuestión es pública y se encuentra en varias fuentes de información abierta. En este caso, se obtienen las cotizaciones de 2007 en adelante, gracias al paquete de R `quantmod`, que obtiene la información gracias a la API de Yahoo Finance.
 
 ## Técnicas
+
+Las técnicas estudiadas a lo largo de la especialización que se aplicarán en este estudio serán, en principio, dos:
+
+1. Por un lado, un modelo estadístico basado en series de tiempo. Puntualmente, sería la implementación de modelo Prophet. 
+2. Por otro lado, un modelo de redes neuronales, de amplia difusión en el mundo del trading algorítmico. 
 
 
