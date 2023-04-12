@@ -16,33 +16,33 @@ path <- here::here()
 
 ## Introducción
 
-El *trading* consiste en la compra y venta de acciones de empresas en el mercado bursátil, buscando obtener una diferencia de dinero positiva entre las operaciones. Si bien se puede realizar *trading* con varios instrumentos financieros y apostando a diferentes formas de cambio en el precio, la forma más difundida es a partir de la compra de acciones a un determinado precio y su venta posterior a un precio más alto. A lo largo de la historia, los operadores de bolsa buscaron cientos de formas para "adivinar" (o predecir) la tendencia futura del precio de una acción (al alza o a la baja), sea en el corto, mediano o largo plazo, desde minutos hasta años.
+El *trading* consiste en la compra y venta de acciones de empresas en el mercado bursátil, buscando obtener una diferencia de dinero positiva entre las operaciones. A lo largo de la historia, los operadores de bolsa buscaron cientos de formas para predecir el precio de una acción en el corto o largo plazo.
 
 Con este objetivo, la biblioteca se divide en dos formas de análisis del valor de una empresa:
 
 -   El análisis fundamental, que analiza los resultados contables y el producto y el contexto de una empresa, para deducir un valor intrínseco de esa empresa y su capitalización de mercado.
 -   El análisis técnico, que se concentra en estudiar la evolución del precio de una acción y buscar patrones a partir de la generación de gráficos o nuevas métricas.
 
-A partir del estudio de la evolución del precio de una acción para intentar predecir su valor futuro, es que surgieron nuevos indicadores derivados del precio y sistemas completos que indican cuándo puede ser un buen momento para comprar o vender una acción. Estos sistemas fueron desarrollados por operadores con larga trayectoria y provenientes de distintas disciplinas. A lo largo de las últimas décadas, muchos de *sistemas de trading* alcanzaron un amplio reconocimiento por su relativa fiabilidad, dando mayores posibilidades de generar ganancias.
+Así, surgieron nuevos indicadores derivados del precio y sistemas completos que indican cuándo puede ser un buen momento para comprar o vender una acción. Estos sistemas fueron desarrollados por operadores con larga trayectoria y provenientes de distintas disciplinas. A lo largo de las últimas décadas, muchos de *sistemas de trading* alcanzaron un amplio reconocimiento por su relativa fiabilidad, dando mayores posibilidades de generar ganancias.
 
-En los últimos años, con el gran avance que ha tenido la tecnología y la inteligencia artificial sobre el mundo de las finanzas, las bolsas más importantes del mundo vieron un incremento exponencial de la aparición de bots que operan automáticamente acciones. Estos bots operan tanto bajo un sistema de trading que se automatiza con reglas programadas (es decir, los sistemas "clásicos" simplemente automatizados), así como en función de la predicción de algoritmos propios del aprendizaje automático o del deep learning, generando un escenario de nuevas posibilidades para los operadores, con métodos y frecuencias de intercambio de acciones más elevados que nunca, pero también con un cierto margen de desconocimiento de algunas operaciones, producto de las decisiones impulsadas mediante los algoritmos "de caja negra".
+En los últimos años, las bolsas más importantes del mundo vieron un incremento exponencial de la aparición de bots que operan automáticamente acciones. Estos bots operan pueden automatizar la operación bajo una estrategia clásica, así utilizar la predicción de algoritmos propios del aprendizaje automático o del deep learning.
 
-Esta forma de negociar valores mediante sistemas automatizados y basados en mecanismos de aprendizaje de la inteligencia artificial se ha conocido en las últimas dos décadas como "trading algorítmico" y su irrupción en las finanzas promete conquistar cada vez porciones más amplias del mercado bursátil.
+Esta forma de negociar valores mediante sistemas automatizados y basados en mecanismos de aprendizaje de la inteligencia artificial se ha conocido en las últimas dos décadas como "trading algorítmico".
 
 ## Pregunta
 
-Este proyecto, buscará *comparar el rendimiento que se hubiese obtenido operando las 10 acciones* de mayor capitalización bursátil del mercado de Estados Unidos si se hubiesen seguido las señales de compra otorgadas por un sistema tradicional de trading versus los resultados que se hubiesen alcanzado si se operaban las mismas acciones y el mismo dinero siguiendo las predicciones de un modelo estadístico de serie de tiempo (Prophet) y/o las predicciones de una red neuronal (siendo estos modelos de amplia difusión en el estudio del trading algorítmico).
+Este proyecto, buscará **comparar el rendimiento que se hubiese obtenido operando las 10 acciones** de mayor capitalización bursátil del mercado de Estados Unidos si se hubiesen seguido las señales de compra otorgadas por un sistema tradicional de trading versus los resultados que se hubiesen alcanzado si se operaban las mismas acciones y el mismo dinero siguiendo las predicciones de un modelo estadístico de serie de tiempo (Prophet) y/o las predicciones de una red neuronal (siendo estos modelos de amplia difusión en el estudio del trading algorítmico).
 
 ## Dataset
 
-El conjunto de datos a utilizar en el proyecto consta de la información básica de la cotización diario de las 10 acciones de mayor capitalización bursátil de Estados Unidos. Estas son las acciones de las empresas: Apple (AAPL), Microsoft (MSFT), Google (GOOGL), Amazon (AMZN), Berkshire Hathaway (BRK-A), NVIDIA (NVDA), Tesla (TSLA), Meta (META), Visa (V) y Exxon (XOM).
+El conjunto de datos a utilizar en el proyecto consta de la información básica de la cotización diaria de las 10 acciones de mayor capitalización bursátil de Estados Unidos. Estas son las acciones de las empresas: Apple, Microsoft, Google, Amazon, Berkshire Hathaway, NVIDIA, Tesla, Meta, Visa y Exxon.
 
 ```{r echo = FALSE}
 data <- read.csv(glue::glue(path, '/Output/data_entera.csv')) %>% 
   arrange(desc(Date)) %>% 
   select(-Adjusted)
 
-knitr::kable(x = head(data, 10))
+knitr::kable(x = head(data, 3))
 ```
 
 Esta información básica consiste de:
@@ -55,17 +55,17 @@ Esta información básica consiste de:
 
 A partir de estos valores, el análisis técnico confecciona nuevas métricas e indicadores, todos de ellos resultan transformaciones de esta data inicial.
 
-En este caso, la data utilizada tendrá un marco temporal diario, es decir, que se contará con una observación por día para cada acción.
+En este caso, la data utilizada tendrá un marco temporal diario.
 
 ```{r echo = FALSE}
 msft <- data %>% 
   filter(Ticker == "MSFT") %>% 
   arrange(desc(Date))
 
-knitr::kable(x = head(msft, 5), align = "lcccccc")
+knitr::kable(x = head(msft, 3), align = "lcccccc")
 ```
 
-La data en cuestión es pública y se encuentra en varias fuentes de información abierta. En este caso, se obtienen las cotizaciones de 2007 en adelante, gracias al paquete de R `quantmod`, que obtiene la información gracias a la API de Yahoo Finance.
+La data en cuestión se encuentra en varias fuentes de información abierta. En este caso, se obtienen las cotizaciones de 2007 en adelante, gracias al paquete de R `quantmod`, que obtiene la información de Yahoo Finance.
 
 ## Técnicas
 
