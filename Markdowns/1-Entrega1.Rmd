@@ -1,0 +1,77 @@
+---
+title: "Taller de Tesis 1"
+author: "Lisandro Carrasco"
+date: "2023-04-08"
+output: pdf_document
+subtitle: Entrega 1
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(knitr)
+
+path <- here::here()
+```
+
+## Introducción
+
+El *trading* consiste en la compra y venta de acciones de empresas en el mercado bursátil, buscando obtener una diferencia de dinero positiva entre las operaciones. A lo largo de la historia, los operadores de bolsa buscaron cientos de formas para predecir el precio de una acción en el corto o largo plazo.
+
+Con este objetivo, la biblioteca se divide en dos formas de análisis del valor de una empresa:
+
+-   El análisis fundamental, que analiza los resultados contables y el producto y el contexto de una empresa, para deducir un valor intrínseco de esa empresa y su capitalización de mercado.
+-   El análisis técnico, que se concentra en estudiar la evolución del precio de una acción y buscar patrones a partir de la generación de gráficos o nuevas métricas.
+
+Así, surgieron nuevos indicadores derivados del precio y sistemas completos que indican cuándo puede ser un buen momento para comprar o vender una acción. Estos sistemas fueron desarrollados por operadores con larga trayectoria y provenientes de distintas disciplinas. A lo largo de las últimas décadas, muchos de *sistemas de trading* alcanzaron un amplio reconocimiento por su relativa fiabilidad, dando mayores posibilidades de generar ganancias.
+
+En los últimos años, las bolsas más importantes del mundo vieron un incremento exponencial de la aparición de bots que operan automáticamente acciones. Estos bots operan pueden automatizar la operación bajo una estrategia clásica, así utilizar la predicción de algoritmos propios del aprendizaje automático o del deep learning.
+
+Esta forma de negociar valores mediante sistemas automatizados y basados en mecanismos de aprendizaje de la inteligencia artificial se ha conocido en las últimas dos décadas como "trading algorítmico".
+
+## Pregunta
+
+Este proyecto, buscará **comparar el rendimiento que se hubiese obtenido operando las 10 acciones** de mayor capitalización bursátil del mercado de Estados Unidos si se hubiesen seguido las señales de compra otorgadas por un sistema tradicional de trading versus los resultados que se hubiesen alcanzado si se operaban las mismas acciones y el mismo dinero siguiendo las predicciones de un modelo estadístico de serie de tiempo (Prophet) y/o las predicciones de una red neuronal (siendo estos modelos de amplia difusión en el estudio del trading algorítmico).
+
+## Dataset
+
+El conjunto de datos a utilizar en el proyecto consta de la información básica de la cotización diaria de las 10 acciones de mayor capitalización bursátil de Estados Unidos. Estas son las acciones de las empresas: Apple, Microsoft, Google, Amazon, Berkshire Hathaway, NVIDIA, Tesla, Meta, Visa y Exxon.
+
+```{r echo = FALSE}
+data <- read.csv(glue::glue(path, '/Output/data_entera.csv')) %>% 
+  arrange(desc(Date)) %>% 
+  select(-Adjusted)
+
+knitr::kable(x = head(data, 3))
+```
+
+Esta información básica consiste de:
+
+1.  Open: el precio de apertura de una acción, es decir, la primera cotización de la acción en el día.
+2.  High: el precio más alto que alcanzó una acción a lo largo del día.
+3.  Low: el precio más bajo que alcanzó una acción a lo largo del día.
+4.  Close: el último precio de una acción al momento del cierre de la rueda bursátil.
+5.  Volume: el volumen es la cantidad de acciones que se comerciaron a lo largo del día.
+
+A partir de estos valores, el análisis técnico confecciona nuevas métricas e indicadores, todos de ellos resultan transformaciones de esta data inicial.
+
+En este caso, la data utilizada tendrá un marco temporal diario.
+
+```{r echo = FALSE}
+msft <- data %>% 
+  filter(Ticker == "MSFT") %>% 
+  arrange(desc(Date))
+
+knitr::kable(x = head(msft, 3), align = "lcccccc")
+```
+
+La data en cuestión se encuentra en varias fuentes de información abierta. En este caso, se obtienen las cotizaciones de 2007 en adelante, gracias al paquete de R `quantmod`, que obtiene la información de Yahoo Finance.
+
+## Técnicas
+
+Las técnicas estudiadas a lo largo de la especialización que se aplicarán en este estudio serán, en principio, dos:
+
+1. Por un lado, un modelo estadístico basado en series de tiempo. Puntualmente, sería la implementación de modelo Prophet. 
+2. Por otro lado, un modelo de redes neuronales, de amplia difusión en el mundo del trading algorítmico. 
+
+
