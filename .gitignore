@@ -2,6 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+<<<<<<< HEAD
 .gitignore
 .Rproj
 Algo-Trading-Backtesting.Rproj
+=======
+.Rproj
+>>>>>>> dev
