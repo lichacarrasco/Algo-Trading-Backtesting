@@ -15,6 +15,7 @@ library(dplyr)
 library(stringr)
 library(tibble)
 library(lubridate)
+library(ggplot2)
 
 # 3 - Data ----------------------------------------------------------------
 
@@ -94,8 +95,13 @@ volatilidad_relativa <- function(df) {
 
 volatilidad_relativa(test)
 
-
 # > * 2. Calculo ----------------------------------------------------------
+
+data_volatilidad <- data %>%
+  group_split(Ticker) %>%
+  purrr::map_dfr(~volatilidad_relativa(.x))
+
+write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
 
 
 # > * 3. Dotplot ----------------------------------------------------------
