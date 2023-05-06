@@ -13,9 +13,11 @@ path_output <- glue::glue(path, "/Output")
 
 library(dplyr)
 library(stringr)
+library(tidyr)
 library(tibble)
 library(lubridate)
 library(ggplot2)
+library(plotly)
 
 # 3 - Data ----------------------------------------------------------------
 
@@ -51,24 +53,40 @@ any(is.na(data))
 
 # * 2. Visualizaciones ----------------------------------------------------
 
-# # > * 1. Tenencia corto -------------------------------------------------
+# > * 1. Tendencia corto --------------------------------------------------
 
+mes <- test %>% 
+  filter(Date >= as.Date(max(test$Date))-31)
 
+plot_ly(mes, type = "candlestick",
+        x = ~Date, open = ~Open, high = ~High,
+        low = ~Low, close = ~Close, name = mes$Ticker,
+        increasing = list(line = list(color = "green")),
+        decreasing = list(line = list(color = "red"))) %>%
+  layout(title = "Evolución del precio de MSFT en el último mes",
+         xaxis = list(title = "Fecha", rangeslider = list(visible = F)),
+         yaxis = list(title = "Precio"))
+
+# > * 3. Tendencia largo --------------------------------------------------
+
+source(glue::glue('{path}/Funciones/facetado_ajustado.R'))
+
+facetado_ajustado(data = data, fecha_desde = '2018-04-04')
 
 # * 3. Volatilidad --------------------------------------------------------
 
 # > * 1. Funcion ----------------------------------------------------------
 
-volatilidad_historica <- function(df) {
-  df <- df %>% 
-    mutate(Return = (Close - lag(Close))/lag(Close)) %>% 
-    na.omit()
-  volatilidad <- sd(df$Return) * sqrt(252)
-  
-  return(volatilidad)
-}
-
-volatilidad_historica(test)
+# volatilidad_historica <- function(df) {
+#   df <- df %>% 
+#     mutate(Return = (Close - lag(Close))/lag(Close)) %>% 
+#     na.omit()
+#   volatilidad <- sd(df$Return) * sqrt(252)
+#   
+#   return(volatilidad)
+# }
+# 
+# volatilidad_historica(test)
 
 volatilidad_relativa <- function(df) {
   df <- df %>% 
@@ -103,9 +121,19 @@ data_volatilidad <- data %>%
 
 write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
 
+# > * 3. Barplot ----------------------------------------------------------
 
-# > * 3. Dotplot ----------------------------------------------------------
-
+plot_ly(
+  data   = data_volatilidad %>% arrange(VolatilidadHistorica), 
+  x      = ~Ticker, 
+  y      = ~VolatilidadHistorica, 
+  type   = 'bar', 
+  name   = 'Volatilidad Histórica',
+  marker = list(color = 'royalblue3')
+  ) %>% 
+  add_trace(y = ~ValorBeta, name = 'Valor Beta', marker = list(color = 'red')) %>%
+  layout(yaxis = list(title = 'Volatilidad'), barmode = 'group') %>% 
+  layout(xaxis = list(categoryorder = "total ascending"))
 
 # * 4. Serie de tiempo ----------------------------------------------------
 
