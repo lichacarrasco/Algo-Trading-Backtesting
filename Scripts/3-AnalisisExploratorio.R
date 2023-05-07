@@ -18,6 +18,12 @@ library(tibble)
 library(lubridate)
 library(ggplot2)
 library(plotly)
+library(tsibble)
+library(forecast)
+library(feasts)
+library(prophet)
+
+options(encoding = 'UTF-8')
 
 # 3 - Data ----------------------------------------------------------------
 
@@ -30,17 +36,33 @@ test <- data %>%
 
 # 4 - Analisis ------------------------------------------------------------
 
-any(is.na(data))
-
-
 # * 1. Analisis basico ----------------------------------------------------
-
 
 # > * 1. Faltantes --------------------------------------------------------
 
+any(is.na(data)) #No hay faltantes en la data original
+
+# Pero no todas las acciones cotizan desde la misma fecha
 
 # > * 2. Desvio standar ---------------------------------------------------
 
+desvios <- data %>% 
+  filter(Date >= '2020-07-01') %>% # Cuando se recupero del covid el SP500
+  select(Ticker, Date, Close) %>%
+  pivot_wider(names_from = Ticker, values_from = Close) %>%
+  select(-Date) %>% 
+  summarise_all(sd) %>% 
+  gather(Ticker, Desvio, everything())
+
+# Los desvíos estandar no sirven porque hay valores muy distintos
+
+data %>% 
+  filter(Date >= '2020-07-01') %>% # Cuando se recupero del covid el SP500
+  select(Ticker, Date, Close) %>%
+  pivot_wider(names_from = Ticker, values_from = Close) %>%
+  select(-Date) %>% 
+  summarise_all(~ 100 * sd(.x) / mean(.x)) %>% 
+  gather(Ticker, CV, everything())
 
 # > * 3. ¿Desvio de intradiario? ------------------------------------------
 
@@ -119,7 +141,7 @@ data_volatilidad <- data %>%
   group_split(Ticker) %>%
   purrr::map_dfr(~volatilidad_relativa(.x))
 
-write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
+#write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
 
 # > * 3. Barplot ----------------------------------------------------------
 
@@ -133,7 +155,8 @@ plot_ly(
   ) %>% 
   add_trace(y = ~ValorBeta, name = 'Valor Beta', marker = list(color = 'red')) %>%
   layout(yaxis = list(title = 'Volatilidad'), barmode = 'group') %>% 
-  layout(xaxis = list(categoryorder = "total ascending"))
+  layout(xaxis = list(categoryorder = "total ascending")) %>% 
+  layout(title = "Comparación de la volatilidad de cada acción")
 
 # * 4. Serie de tiempo ----------------------------------------------------
 
