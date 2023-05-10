@@ -148,11 +148,25 @@ plot_ly(
 
 # * 4. Serie de tiempo ----------------------------------------------------
 
-# > * 1. Autocorrelacion  -------------------------------------------------
+# > * 1. Descomposicion de la serie ---------------------------------------
+
+serie_tiempo <- data %>%
+  select(ds = Date, y = Close) %>% 
+  mutate(ds = as.Date(ds)) %>% 
+  filter(ds > '2020-10-01' & ds < '2023-12-01') %>% 
+  group_by(ds = floor_date(ds, unit = "week")) %>% 
+  summarise(y = mean(y, na.rm = TRUE)) %>% 
+  as_tsibble(index = ds)
+
+p <- plot(decompose(ts(serie_tiempo$y, frequency = 52)))
+
+ggplotly(p, dynamicTicks = TRUE)
+
+# > * 2. Autocorrelacion  -------------------------------------------------
 
 
 
-# > * 2. Estacionalidad ---------------------------------------------------
+# > * 3. Estacionalidad ---------------------------------------------------
 
 
 
