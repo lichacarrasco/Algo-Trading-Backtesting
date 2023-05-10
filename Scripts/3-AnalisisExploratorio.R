@@ -151,6 +151,7 @@ plot_ly(
 # > * 1. Descomposicion de la serie ---------------------------------------
 
 serie_tiempo <- data %>%
+  filter(Ticker == "MSFT") %>% 
   select(ds = Date, y = Close) %>% 
   mutate(ds = as.Date(ds)) %>% 
   filter(ds > '2020-10-01' & ds < '2023-12-01') %>% 
@@ -158,15 +159,37 @@ serie_tiempo <- data %>%
   summarise(y = mean(y, na.rm = TRUE)) %>% 
   as_tsibble(index = ds)
 
-p <- plot(decompose(ts(serie_tiempo$y, frequency = 52)))
-
-ggplotly(p, dynamicTicks = TRUE)
+plot(decompose(ts(serie_tiempo$y, frequency = 52)))
 
 # > * 2. Autocorrelacion  -------------------------------------------------
 
+acf(test %>% select(Volume),type = "correlation", na.action = na.pass )
 
+pacf(test %>% select(Adjusted))
 
 # > * 3. Estacionalidad ---------------------------------------------------
 
 
 
+
+# 5. Prophet --------------------------------------------------------------
+
+test_prophet <- test %>% 
+  select(ds = Date, y = Close) %>% 
+  mutate(ds = as.Date(ds))
+
+covid <- data.frame(
+  holiday      = 'covid',
+  ds           = seq(as.Date("2020-02-19"), as.Date("2020-08-18"), by = "day"),
+  lower_window = 0,
+  upper_window = 0
+)
+
+prophet <- prophet(holidays = covid)
+
+prophet <- add_seasonality(prophet, name = 'monthly', period = 30.5, fourier.order = 4)
+
+prophet <- fit.prophet(m = prophet, test_prophet)
+
+plot(prophet, fcst = predict(prophet, test_prophet)) +
+  theme_bw()
