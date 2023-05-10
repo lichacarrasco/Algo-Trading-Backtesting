@@ -22,8 +22,12 @@ library(tsibble)
 library(forecast)
 library(feasts)
 library(prophet)
+library(descr)
 
-options(encoding = 'UTF-8')
+options(
+  encoding = 'UTF-8',
+  scipen = 9999
+  )
 
 # 3 - Data ----------------------------------------------------------------
 
@@ -44,34 +48,29 @@ any(is.na(data)) #No hay faltantes en la data original
 
 # Pero no todas las acciones cotizan desde la misma fecha
 
+data %>% 
+  group_by(Ticker) %>% 
+  summarise(Start = min(Date)) %>% 
+  arrange(Start)
+
 # > * 2. Desvio standar ---------------------------------------------------
 
-desvios <- data %>% 
-  filter(Date >= '2020-07-01') %>% # Cuando se recupero del covid el SP500
-  select(Ticker, Date, Close) %>%
-  pivot_wider(names_from = Ticker, values_from = Close) %>%
-  select(-Date) %>% 
-  summarise_all(sd) %>% 
-  gather(Ticker, Desvio, everything())
-
-# Los desvíos estandar no sirven porque hay valores muy distintos
-
 data %>% 
-  filter(Date >= '2020-07-01') %>% # Cuando se recupero del covid el SP500
-  select(Ticker, Date, Close) %>%
-  pivot_wider(names_from = Ticker, values_from = Close) %>%
-  select(-Date) %>% 
-  summarise_all(~ 100 * sd(.x) / mean(.x)) %>% 
-  gather(Ticker, CV, everything())
-
-# > * 3. ¿Desvio de intradiario? ------------------------------------------
-
-
-# > * 4. Precio promedio anual --------------------------------------------
-
+  group_by(Ticker) %>% 
+  summarise(
+    Desvio = sd(Close),
+    CV     = sd(Close) / mean(Close) * 100,
+    Start = min(Date)
+  ) %>% 
+  arrange(CV)
 
 # > * 5. Distribucion volumen ---------------------------------------------
 
+ggplot(data, aes(x = Adjusted, fill = Ticker)) +
+   geom_density(alpha = 0.5) +
+  facet_wrap(~ Ticker, scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribución de Close por Ticker", x = "Close", y = "Frecuencia")
 
 # * 2. Visualizaciones ----------------------------------------------------
 
@@ -99,18 +98,7 @@ facetado_ajustado(data = data, fecha_desde = '2018-04-04')
 
 # > * 1. Funcion ----------------------------------------------------------
 
-# volatilidad_historica <- function(df) {
-#   df <- df %>% 
-#     mutate(Return = (Close - lag(Close))/lag(Close)) %>% 
-#     na.omit()
-#   volatilidad <- sd(df$Return) * sqrt(252)
-#   
-#   return(volatilidad)
-# }
-# 
-# volatilidad_historica(test)
-
-volatilidad_relativa <- function(df) {
+calcular_volatilidad <- function(df) {
   df <- df %>% 
     arrange(Date) %>% 
     mutate(Return = log(Close / lag(Close))) %>% 
@@ -133,13 +121,13 @@ volatilidad_relativa <- function(df) {
   data.frame(Ticker = unique(df$Ticker), Volatilidad = volatilidad, ValorBeta = valor_beta)
 }
 
-volatilidad_relativa(test)
+calcular_volatilidad(test)
 
 # > * 2. Calculo ----------------------------------------------------------
 
 data_volatilidad <- data %>%
   group_split(Ticker) %>%
-  purrr::map_dfr(~volatilidad_relativa(.x))
+  purrr::map_dfr(~calcular_volatilidad(.x))
 
 #write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
 
