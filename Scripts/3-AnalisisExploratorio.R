@@ -22,7 +22,7 @@ library(tsibble)
 library(forecast)
 library(feasts)
 library(prophet)
-library(descr)
+library(corrplot)
 
 options(
   encoding = 'UTF-8',
@@ -66,8 +66,8 @@ data %>%
 
 # > * 5. Distribucion volumen ---------------------------------------------
 
-ggplot(data, aes(x = Adjusted, fill = Ticker)) +
-   geom_density(alpha = 0.5) +
+ggplot(data, aes(x = Volume, fill = Ticker)) +
+  geom_density(alpha = 0.5) +
   facet_wrap(~ Ticker, scales = "free") +
   theme_minimal() +
   labs(title = "Distribución de Close por Ticker", x = "Close", y = "Frecuencia")
@@ -92,44 +92,50 @@ plot_ly(mes, type = "candlestick",
 
 source(glue::glue('{path}/Funciones/facetado_ajustado.R'))
 
+# Usa el valor ajustado. Explicar qué es
+
 facetado_ajustado(data = data, fecha_desde = '2018-04-04')
 
 # * 3. Volatilidad --------------------------------------------------------
 
 # > * 1. Funcion ----------------------------------------------------------
 
-calcular_volatilidad <- function(df) {
-  df <- df %>% 
-    arrange(Date) %>% 
-    mutate(Return = log(Close / lag(Close))) %>% 
-    na.omit()
-  
-  volatilidad <- df %>% 
-    summarize(VolatilidadHistorica = sd(Return) * sqrt(252))
-  
-  sp500 <- read.csv("https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=946713600&period2=1938341200&interval=1d&events=history&includeAdjustedClose=true")
-  sp500 <- sp500 %>% 
-    select(Date, Close) %>% 
-    mutate(ReturnSP500 = log(Close / lag(Close))) %>% 
-    na.omit()
-  
-  data_sp500 <- left_join(df, sp500, by = "Date")
-  
-  valor_beta <- data_sp500 %>% 
-    summarize(ValorBeta = cov(Return, ReturnSP500) / var(ReturnSP500))
-  
-  data.frame(Ticker = unique(df$Ticker), Volatilidad = volatilidad, ValorBeta = valor_beta)
-}
-
-calcular_volatilidad(test)
+# calcular_volatilidad <- function(df) {
+#   df <- df %>% 
+#     arrange(Date) %>% 
+#     mutate(Return = log(Close / lag(Close))) %>% 
+#     na.omit()
+#   
+#   volatilidad <- df %>% 
+#     summarize(VolatilidadHistorica = sd(Return) * sqrt(252))
+#   
+#   sp500 <- read.csv("https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=946713600&period2=1938341200&interval=1d&events=history&includeAdjustedClose=true")
+#   sp500 <- sp500 %>% 
+#     select(Date, Close) %>% 
+#     filter(Date != '2012-08-27') %>% 
+#     mutate(Close = as.numeric(Close)) %>% 
+#     mutate(ReturnSP500 = log(Close / lag(Close))) %>% 
+#     na.omit()
+#   
+#   data_sp500 <- left_join(df, sp500, by = "Date")
+#   
+#   valor_beta <- data_sp500 %>% 
+#     summarize(ValorBeta = cov(Return, ReturnSP500) / var(ReturnSP500))
+#   
+#   data.frame(Ticker = unique(df$Ticker), Volatilidad = volatilidad, ValorBeta = valor_beta)
+# }
+# 
+# calcular_volatilidad(test)
 
 # > * 2. Calculo ----------------------------------------------------------
 
-data_volatilidad <- data %>%
-  group_split(Ticker) %>%
-  purrr::map_dfr(~calcular_volatilidad(.x))
+# data_volatilidad <- data %>%
+#   group_split(Ticker) %>%
+#   purrr::map_dfr(~calcular_volatilidad(.x))
 
 #write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
+
+data_volatilidad <- read.csv(glue::glue('{path}/Output/data_volatilidad.csv')) 
 
 # > * 3. Barplot ----------------------------------------------------------
 
@@ -145,6 +151,25 @@ plot_ly(
   layout(yaxis = list(title = 'Volatilidad'), barmode = 'group') %>% 
   layout(xaxis = list(categoryorder = "total ascending")) %>% 
   layout(title = "Comparación de la volatilidad de cada acción")
+
+
+# > * 4. Corplot ----------------------------------------------------------
+
+volumen_medio <- data %>% 
+  group_by(Ticker) %>% 
+  summarise(VolumenMedio = mean(Volume))
+
+data_volatilidad <- data_volatilidad %>% 
+  left_join(
+    volumen_medio,
+    by = c ("Ticker")
+  ) 
+
+matriz_correlacion <- data_volatilidad %>% 
+  select(-X, -Ticker)
+
+
+corrplot(cor(matriz_correlacion), method = "circle", type = "lower", tl.col = "black", tl.srt = 30)
 
 # * 4. Serie de tiempo ----------------------------------------------------
 
