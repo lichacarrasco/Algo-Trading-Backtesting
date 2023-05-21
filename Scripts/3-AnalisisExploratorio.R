@@ -23,6 +23,7 @@ library(forecast)
 library(feasts)
 library(prophet)
 library(corrplot)
+library(GGally)
 
 options(
   encoding = 'UTF-8',
@@ -37,6 +38,10 @@ test <- data %>%
   filter(Ticker == "MSFT") %>% 
   arrange(desc(Date)) %>% 
   mutate(Days = n():1)
+
+data_pivot <- data %>% 
+  select(Date, Ticker, Adjusted) %>% 
+  pivot_wider(names_from = Ticker, values_from = Adjusted)
 
 # 4 - Analisis ------------------------------------------------------------
 
@@ -64,7 +69,7 @@ data %>%
   ) %>% 
   arrange(CV)
 
-# > * 5. Distribucion volumen ---------------------------------------------
+# > * 3. Distribucion volumen ---------------------------------------------
 
 ggplot(data, aes(x = Volume, fill = Ticker)) +
   geom_density(alpha = 0.5) +
@@ -72,31 +77,43 @@ ggplot(data, aes(x = Volume, fill = Ticker)) +
   theme_minimal() +
   labs(title = "Distribución de Close por Ticker", x = "Close", y = "Frecuencia")
 
-# * 2. Visualizaciones ----------------------------------------------------
+# > * 4. Correlacion ------------------------------------------------------
 
-# > * 1. Tendencia corto --------------------------------------------------
+bi_test <- data %>% 
+  mutate(Date = as.Date(Date)) %>% 
+  filter(Ticker %in% c("MSFT", "AAPL", "XOM", "V")) %>% 
+  filter(year(Date) > 2017) %>% 
+  select(Date, Adjusted, Ticker) %>% 
+  pivot_wider(names_from = Ticker, values_from = Adjusted)
 
-mes <- test %>% 
-  filter(Date >= as.Date(max(test$Date))-31)
+cor(bi_test %>% select(-Date))
 
-plot_ly(mes, type = "candlestick",
-        x = ~Date, open = ~Open, high = ~High,
-        low = ~Low, close = ~Close, name = mes$Ticker,
-        increasing = list(line = list(color = "green")),
-        decreasing = list(line = list(color = "red"))) %>%
-  layout(title = "Evolución del precio de MSFT en el último mes",
-         xaxis = list(title = "Fecha", rangeslider = list(visible = F)),
-         yaxis = list(title = "Precio"))
+# Pasar a plotly y poner colores a cada ticker
 
-# > * 3. Tendencia largo --------------------------------------------------
+bi_test %>% 
+  ggplot(aes(x = AAPL, y = MSFT)) +
+  geom_point()
 
-source(glue::glue('{path}/Funciones/facetado_ajustado.R'))
+bi_test %>% 
+  ggplot(aes(x = XOM, y = MSFT)) +
+  geom_point()
 
-# Usa el valor ajustado. Explicar qué es
+# > * 5. Dispersion -------------------------------------------------------
 
-facetado_ajustado(data = data, fecha_desde = '2018-04-04')
+data %>% 
+  mutate(Date = as.Date(Date)) %>%
+  filter(year(Date) > 2017) %>% 
+  mutate(Month = zoo::as.yearmon(Date, "%Y-%m")) %>% 
+  group_by(Ticker, Month) %>% 
+  summarise(Adj_mean = mean(Adjusted)) %>% 
+  ggplot(aes(x = Month, y = Adj_mean)) +
+  geom_line() +
+  facet_grid(vars(Ticker), scales = "free_y") +
+  labs(title = "Evolución comparada del precio ajustado",
+       y= "Precio ajustado") + 
+  theme_minimal()
 
-# * 3. Volatilidad --------------------------------------------------------
+# * 2. Volatilidad --------------------------------------------------------
 
 # > * 1. Funcion ----------------------------------------------------------
 
@@ -171,7 +188,62 @@ matriz_correlacion <- data_volatilidad %>%
 
 corrplot(cor(matriz_correlacion), method = "circle", type = "lower", tl.col = "black", tl.srt = 30)
 
-# * 4. Serie de tiempo ----------------------------------------------------
+# * 3. Serie de tiempo ----------------------------------------------------
+
+# > * 1. Tendencia corto --------------------------------------------------
+
+mes <- test %>% 
+  filter(Date >= as.Date(max(test$Date))-31)
+
+plot_ly(mes, type = "candlestick",
+        x = ~Date, open = ~Open, high = ~High,
+        low = ~Low, close = ~Close, name = mes$Ticker,
+        increasing = list(line = list(color = "green")),
+        decreasing = list(line = list(color = "red"))) %>%
+  layout(title = "Evolución del precio de MSFT en el último mes",
+         xaxis = list(title = "Fecha", rangeslider = list(visible = F)),
+         yaxis = list(title = "Precio"))
+
+# > * 2. Tendencia largo --------------------------------------------------
+
+source(glue::glue('{path}/Funciones/facetado_ajustado.R'))
+
+# Usa el valor ajustado. Explicar qué es
+
+facetado_ajustado(data = data, fecha_desde = '2018-04-04')
+
+# > * 3. Autocorrelacion  -------------------------------------------------
+
+acf(test %>% select(Volume),type = "correlation", na.action = na.pass )
+
+pacf(test %>% select(Adjusted))
+
+data_pivot %>%
+  mutate(Date = as.Date(Date)) %>% 
+  as_tsibble(index = Date) %>%
+  tsibble::fill_gaps() %>% 
+  ACF(AAPL, lag_max = 52, type = "correlation", na.action = na.pass) %>% 
+  autoplot()+
+  labs(title = "Autocorrelacion", subtitle = "AAPL")
+
+
+########## HASTA ACÁ ESTÁ CHEQUEADO
+
+
+# > * 3. Estacionalidad ---------------------------------------------------
+
+test <- data %>% 
+  filter(Ticker == "MSFT") %>% 
+  mutate(Date = as.Date(Date)) %>% 
+  tsibble(index = "Date")
+
+test %>% 
+  filter(Date > '2017-12-31') %>% 
+  tsibble::fill_gaps() %>% 
+  tidyr::fill(Adjusted, .direction = "down") %>% 
+  gg_season(Adjusted, labels = "both", na.rm = TRUE) +
+  labs(y = "Valor ajustado", title = "Gráfico estacional", subtitle = 'MSFT') +
+  theme_minimal()
 
 # > * 1. Descomposicion de la serie ---------------------------------------
 
@@ -186,11 +258,7 @@ serie_tiempo <- data %>%
 
 plot(decompose(ts(serie_tiempo$y, frequency = 52)))
 
-# > * 2. Autocorrelacion  -------------------------------------------------
 
-acf(test %>% select(Volume),type = "correlation", na.action = na.pass )
-
-pacf(test %>% select(Adjusted))
 
 # > * 3. Estacionalidad ---------------------------------------------------
 
