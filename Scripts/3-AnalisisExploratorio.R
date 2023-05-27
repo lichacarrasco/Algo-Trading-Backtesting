@@ -32,15 +32,18 @@ options(
 
 # 3 - Data ----------------------------------------------------------------
 
-data <- read.csv(glue::glue('{path}/Output/data_entera.csv'))
+data <- read.csv(glue::glue('{path}/Output/data_entera.csv')) %>% 
+  mutate(Date = as.Date(Date))
 
 test <- data %>% 
+  mutate(Date = as.Date(Date)) %>% 
   filter(Ticker == "MSFT") %>% 
   arrange(desc(Date)) %>% 
   mutate(Days = n():1)
 
 data_pivot <- data %>% 
   select(Date, Ticker, Adjusted) %>% 
+  mutate(Date = as.Date(Date)) %>% 
   pivot_wider(names_from = Ticker, values_from = Adjusted)
 
 # 4 - Analisis ------------------------------------------------------------
@@ -79,29 +82,28 @@ ggplot(data, aes(x = Volume, fill = Ticker)) +
 
 # > * 4. Correlacion ------------------------------------------------------
 
-bi_test <- data %>% 
-  mutate(Date = as.Date(Date)) %>% 
-  filter(Ticker %in% c("MSFT", "AAPL", "XOM", "V")) %>% 
-  filter(year(Date) > 2017) %>% 
-  select(Date, Adjusted, Ticker) %>% 
-  pivot_wider(names_from = Ticker, values_from = Adjusted)
+data_pivot <- data_pivot %>% 
+  filter(year(Date) > 2017)
 
-cor(bi_test %>% select(-Date))
+cor(data_pivot %>% select(-Date))
+
+### Esto hace el corplot para todas
+bi_test %>% 
+  GGally::ggpairs(columns = 2:5)
 
 # Pasar a plotly y poner colores a cada ticker
 
-bi_test %>% 
+data_pivot %>% 
   ggplot(aes(x = AAPL, y = MSFT)) +
   geom_point()
 
-bi_test %>% 
+data_pivot %>% 
   ggplot(aes(x = XOM, y = MSFT)) +
   geom_point()
 
 # > * 5. Dispersion -------------------------------------------------------
 
 data %>% 
-  mutate(Date = as.Date(Date)) %>%
   filter(year(Date) > 2017) %>% 
   mutate(Month = zoo::as.yearmon(Date, "%Y-%m")) %>% 
   group_by(Ticker, Month) %>% 
@@ -117,42 +119,44 @@ data %>%
 
 # > * 1. Funcion ----------------------------------------------------------
 
-# calcular_volatilidad <- function(df) {
-#   df <- df %>% 
-#     arrange(Date) %>% 
-#     mutate(Return = log(Close / lag(Close))) %>% 
-#     na.omit()
-#   
-#   volatilidad <- df %>% 
-#     summarize(VolatilidadHistorica = sd(Return) * sqrt(252))
-#   
-#   sp500 <- read.csv("https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=946713600&period2=1938341200&interval=1d&events=history&includeAdjustedClose=true")
-#   sp500 <- sp500 %>% 
-#     select(Date, Close) %>% 
-#     filter(Date != '2012-08-27') %>% 
-#     mutate(Close = as.numeric(Close)) %>% 
-#     mutate(ReturnSP500 = log(Close / lag(Close))) %>% 
-#     na.omit()
-#   
-#   data_sp500 <- left_join(df, sp500, by = "Date")
-#   
-#   valor_beta <- data_sp500 %>% 
-#     summarize(ValorBeta = cov(Return, ReturnSP500) / var(ReturnSP500))
-#   
-#   data.frame(Ticker = unique(df$Ticker), Volatilidad = volatilidad, ValorBeta = valor_beta)
-# }
-# 
-# calcular_volatilidad(test)
+calcular_volatilidad <- function(df) {
+  df <- df %>%
+    arrange(Date) %>%
+    mutate(Return = log(Close / lag(Close))) %>%
+    na.omit()
+
+  volatilidad <- df %>%
+    summarize(VolatilidadHistorica = sd(Return) * sqrt(252))
+
+  sp500 <- read.csv("https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=946713600&period2=1938341200&interval=1d&events=history&includeAdjustedClose=true")
+  sp500 <- sp500 %>%
+    select(Date, Close) %>%
+    mutate(
+      Date        = as.Date(Date),
+      Close       = as.numeric(Close),
+      ReturnSP500 = log(Close / lag(Close))
+    ) %>%
+    na.omit()
+
+  data_sp500 <- left_join(df, sp500, by = "Date")
+
+  valor_beta <- data_sp500 %>%
+    summarize(ValorBeta = cov(Return, ReturnSP500) / var(ReturnSP500))
+
+  data.frame(Ticker = unique(df$Ticker), Volatilidad = volatilidad, ValorBeta = valor_beta)
+}
+
+calcular_volatilidad(test)
 
 # > * 2. Calculo ----------------------------------------------------------
 
-# data_volatilidad <- data %>%
-#   group_split(Ticker) %>%
-#   purrr::map_dfr(~calcular_volatilidad(.x))
+data_volatilidad <- data %>%
+  group_split(Ticker) %>%
+  purrr::map_dfr(~calcular_volatilidad(.x))
 
 #write.csv(data_volatilidad, glue::glue('{path}/Output/data_volatilidad.csv'))
 
-data_volatilidad <- read.csv(glue::glue('{path}/Output/data_volatilidad.csv')) 
+data_volatilidad
 
 # > * 3. Barplot ----------------------------------------------------------
 
@@ -172,6 +176,8 @@ plot_ly(
 
 # > * 4. Corplot ----------------------------------------------------------
 
+# Esto creo que puede salir
+
 volumen_medio <- data %>% 
   group_by(Ticker) %>% 
   summarise(VolumenMedio = mean(Volume))
@@ -183,10 +189,15 @@ data_volatilidad <- data_volatilidad %>%
   ) 
 
 matriz_correlacion <- data_volatilidad %>% 
-  select(-X, -Ticker)
+  arrange(desc(ValorBeta), VolumenMedio)
 
-
-corrplot(cor(matriz_correlacion), method = "circle", type = "lower", tl.col = "black", tl.srt = 30)
+# corrplot(
+#   cor(matriz_correlacion %>% select(-Ticker)), 
+#   method = "circle", 
+#   type   = "lower", 
+#   tl.col = "black", 
+#   tl.srt = 30
+# )
 
 # * 3. Serie de tiempo ----------------------------------------------------
 
@@ -219,25 +230,16 @@ acf(test %>% select(Volume),type = "correlation", na.action = na.pass )
 pacf(test %>% select(Adjusted))
 
 data_pivot %>%
-  mutate(Date = as.Date(Date)) %>% 
   as_tsibble(index = Date) %>%
   tsibble::fill_gaps() %>% 
-  ACF(AAPL, lag_max = 52, type = "correlation", na.action = na.pass) %>% 
+  ACF(MSFT, lag_max = 52, type = "correlation", na.action = na.pass) %>% 
   autoplot()+
-  labs(title = "Autocorrelacion", subtitle = "AAPL")
+  labs(title = "Autocorrelacion", subtitle = "MSFT")
 
-
-########## HASTA ACÁ ESTÁ CHEQUEADO
-
-
-# > * 3. Estacionalidad ---------------------------------------------------
-
-test <- data %>% 
-  filter(Ticker == "MSFT") %>% 
-  mutate(Date = as.Date(Date)) %>% 
-  tsibble(index = "Date")
+# > * 4. Estacionalidad ---------------------------------------------------
 
 test %>% 
+  tsibble(index = "Date") %>% 
   filter(Date > '2017-12-31') %>% 
   tsibble::fill_gaps() %>% 
   tidyr::fill(Adjusted, .direction = "down") %>% 
@@ -245,23 +247,51 @@ test %>%
   labs(y = "Valor ajustado", title = "Gráfico estacional", subtitle = 'MSFT') +
   theme_minimal()
 
-# > * 1. Descomposicion de la serie ---------------------------------------
+# > * 5. Descomposicion de la serie ---------------------------------------
 
 serie_tiempo <- data %>%
   filter(Ticker == "MSFT") %>% 
   select(ds = Date, y = Close) %>% 
   mutate(ds = as.Date(ds)) %>% 
-  filter(ds > '2020-10-01' & ds < '2023-12-01') %>% 
+  filter(ds > '2018-10-01' & ds < '2023-12-01') %>% 
   group_by(ds = floor_date(ds, unit = "week")) %>% 
   summarise(y = mean(y, na.rm = TRUE)) %>% 
   as_tsibble(index = ds)
 
 plot(decompose(ts(serie_tiempo$y, frequency = 52)))
 
+## Forma del libro
+
+test_ts <- test %>% 
+  tsibble(index = Date) %>% 
+  filter(Date > '2018-10-01') %>% 
+  select(Date, Ticker, Adjusted) 
+str(test_ts)
+any(is.na(test))
+
+autoplot(test_ts, Adjusted)
+
+#Esto forma un "dable", el tipo de df descompuesto
+# Donde Adjusted mantiene el valor original
+# Y las otras columnas son los componentes estimados
+dcmp_test <- test_ts %>% 
+  tsibble::fill_gaps() %>% 
+  tidyr::fill(Adjusted, .direction = "down") %>%
+  model(stl = STL(Adjusted ~ trend(window = 21), robust = TRUE))
+components(dcmp_test) %>% 
+  autoplot()
+
+# > * 6. Fuerza de la tendencia y estacionalidad --------------------------
+
+test %>% 
+  as_tsibble(index = Date) %>% 
+  filter(Date > '2018-10-01') %>% 
+  select(Date, Ticker, Adjusted) %>% 
+  features(Adjusted, feat_stl) 
 
 
-# > * 3. Estacionalidad ---------------------------------------------------
 
+##### HASTA ACÁ ESTÁ CHEQUEADO
 
 
 
