@@ -1,0 +1,476 @@
+---
+title: "2-Entrega2"
+author: "Lisandro Carrasco"
+date: "2023-05-10"
+output: 
+  html_document: 
+    toc: true
+    toc_depth: 4
+    toc_float: 
+      collapsed: false
+---
+
+```{r setup, include=FALSE}
+path <- here::here()
+
+path_output <- glue::glue(path, "/Output")
+
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(tibble)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(tsibble)
+library(forecast)
+library(feasts)
+library(prophet)
+library(corrplot)
+library(cowplot)
+
+options(
+  encoding = 'UTF-8',
+  scipen = 4
+  )
+
+```
+
+## Introducción
+
+El *trading* consiste en la compra y venta de acciones de empresas en el mercado bursátil, buscando obtener una diferencia de dinero positiva entre las operaciones. A lo largo de la historia, los operadores de bolsa buscaron cientos de formas para predecir el precio de una acción en el corto o largo plazo.
+
+Con este objetivo, la biblioteca se divide en dos formas de análisis del valor de una empresa:
+
+-   El análisis fundamental, que analiza los resultados contables y el producto y el contexto de una empresa, para deducir un valor intrínseco de esa empresa y su capitalización de mercado.
+-   El análisis técnico, que se concentra en estudiar la evolución del precio de una acción y buscar patrones a partir de la generación de gráficos o nuevas métricas.
+
+Así, surgieron nuevos indicadores derivados del precio y sistemas completos que indican cuándo puede ser un buen momento para comprar o vender una acción. Estos sistemas fueron desarrollados por operadores con larga trayectoria y provenientes de distintas disciplinas. A lo largo de las últimas décadas, muchos de *sistemas de trading* alcanzaron un amplio reconocimiento por su relativa fiabilidad, dando mayores posibilidades de generar ganancias.
+
+En los últimos años, las bolsas más importantes del mundo vieron un incremento exponencial de la aparición de bots que operan automáticamente acciones. Estos bots operan pueden automatizar la operación bajo una estrategia clásica, así utilizar la predicción de algoritmos propios del aprendizaje automático o del deep learning.
+
+Esta forma de negociar valores mediante sistemas automatizados y basados en mecanismos de aprendizaje de la inteligencia artificial se ha conocido en las últimas dos décadas como "trading algorítmico".
+
+## Pregunta
+
+Este proyecto, buscará **comparar el rendimiento que se hubiese obtenido operando las 10 acciones** de mayor capitalización bursátil del mercado de Estados Unidos si se hubiesen seguido las señales de compra otorgadas por un sistema tradicional de trading versus los resultados que se hubiesen alcanzado si se operaban las mismas acciones y el mismo dinero siguiendo las predicciones de un modelo estadístico de serie de tiempo (Prophet) y/o las predicciones de una red neuronal (siendo estos modelos de amplia difusión en el estudio del trading algorítmico).
+
+## Dataset
+
+El conjunto de datos a utilizar en el proyecto consta de la información básica de la cotización diaria de las 10 acciones de mayor capitalización bursátil de Estados Unidos. Estas son las acciones de las empresas: Apple, Microsoft, Google, Amazon, Berkshire Hathaway, NVIDIA, Tesla, Meta, Visa y Exxon.
+
+```{r data, echo=FALSE}
+data <- read.csv(glue::glue('{path}/Output/data_entera.csv')) %>% 
+  mutate(Date = as.Date(Date)) %>% 
+  arrange(desc(Date))
+
+knitr::kable(x = head(data, 3))
+```
+
+Esta información básica consiste de:
+
+1.  Open: el precio de apertura de una acción, es decir, la primera cotización de la acción en el día.
+2.  High: el precio más alto que alcanzó una acción a lo largo del día.
+3.  Low: el precio más bajo que alcanzó una acción a lo largo del día.
+4.  Close: el último precio de una acción al momento del cierre de la rueda bursátil.
+5.  Volume: el volumen es la cantidad de acciones que se comerciaron a lo largo del día.
+
+A partir de estos valores, el análisis técnico confecciona nuevas métricas e indicadores, todos de ellos resultan transformaciones de esta data inicial.
+
+En este caso, la data utilizada tendrá un marco temporal diario.
+
+```{r echo = FALSE}
+msft <- data %>% 
+  filter(Ticker == "MSFT") %>% 
+  arrange(desc(Date))
+
+knitr::kable(x = head(msft, 3), align = "lcccccc")
+```
+
+La data en cuestión se encuentra en varias fuentes de información abierta. En este caso, se obtienen las cotizaciones de 2007 en adelante, gracias al paquete de R `quantmod`, que obtiene la información de Yahoo Finance.
+
+## Técnicas
+
+Las técnicas estudiadas a lo largo de la especialización que se aplicarán en este estudio serán, en principio, dos:
+
+1.  Por un lado, un modelo estadístico basado en series de tiempo. Puntualmente, sería la implementación de modelo Prophet.
+2.  Por otro lado, un modelo de redes neuronales, de amplia difusión en el mundo del trading algorítmico.
+
+## Análisis
+
+Los modelos estadísticos basados en series de tiempo tienen una forma propia de análisis, que comparte algunos puntos en común con el análisis exploratorio de datos no temporales, pero que también presenta características propias del comportamiento fluctante a lo largo del tiempo. El libro 'Forecasting: Principles and Practice', de Hyndman, R.J. & Athanasopoulos, G, es una guía de gran valor para ordenar y comprender el análisis que debe hacerse de este tipo de datos.
+
+En el caso de este trabajo, es importante señalar que los datos financieros son un tipo muy particular de series de tiempos. Si bien los datos macro económicos son unos de los principales insumos para esta rama de estudios, el caso de las acciones presenta mayor particularidad y dificultad, dado que su volatilidad y la multiplicidad de factores subjetivos que la condicionan no siempre se expresan en datos. Si bien hay muchos datos disponibles sobre una acción, un índice o varios indicadores financieros, tenemos una comprensión limitada de los factores que afectan al precio de una acción particular, en un contexto donde el pasado no necesariamente determina el futuro y hasta se dan situaciones de "profesías autocumplidas", donde el comportamiento del mercado puede condicionarse por sus propios pronósticos, como se expone en la "hipótesis del mercado eficiente".
+
+A pesar de estas dificultades, el análisis técnico plantea la idea de que el mercado se anticipa a los cambios y que "todo lo que sea posible, se descuenta en el precio de una acción", siendo así el precio mismo de un ticker, suficientemente sintomático de una multiplicidad de factores que sería difícil aunar en un solo análisis. A la vez, Hyndman, R.J. & Athanasopoulos, G (2021) apuntan que, a pesar de que los métodos más simples de análisis de series de tiempo no apuntan a descubrir los factores que afectan su comportamiento, sí resultan extremadamente útil para detectar tendencias y patrones estacionales a partir de la descomposición.
+
+Partiendo de la premisa de que el mercado todo lo descuenta, se analizan las series de tiempo de las 10 acciones mencionadas previamente (teniendo a la acción de Microsoft (MSFT) como primer ejemplo en varios casos donde los gráficos se tornarían muy reiterativos en caso de hacerlos para cada empresa), intentando identificar tendencias y patrones estacionales en el comportamiento de la acción.
+
+```{r otros datos, echo=FALSE}
+msft <- data %>% 
+  filter(Ticker == "MSFT") %>% 
+  arrange(desc(Date)) %>% 
+  mutate(Days = n():1)
+
+data_pivot <- data %>% 
+  select(Date, Ticker, Adjusted) %>% 
+  pivot_wider(names_from = Ticker, values_from = Adjusted)
+```
+
+### Análisis básico
+
+Un punto de partida elemental del análisis de datos consiste en chequear la calidad de los datos en cuestión. En este caso, dado que los datos provienen de Yahoo Finance (un sitio altamente utilizado para la búsqueda de información financiera), se puede asumir que tiene una calidad de datos relativamente alta.
+
+```{r, echo=FALSE, include=FALSE}
+any(is.na(data))
+```
+
+De hecho, vemos que no hay ningun valor faltante, en la data original, pero también se apunta que algunas de las empresas seleccionadas no han cotizado desde el primer día de información descargada:
+
+```{r fechas inicio, echo=FALSE}
+knitr::kable(
+ data %>% 
+  group_by(Ticker) %>% 
+  summarise(Start = min(Date)) %>% 
+  arrange(Start) 
+)
+```
+
+Esto implica que el pivoteo de la data actual, generará valor faltantes para las acciones de Visa, Tesla y Meta, dado que comenzaron a cotizar en bolsa a partir de 2008 en adelante.
+
+#### Desvío estandar y coeficiente de variación
+
+Para comenzar a entender cuánto o cómo varía el precio de una acción, miramos su desvío estándar y su coeficiente de variación
+
+```{r ds y cv, echo=FALSE}
+
+knitr::kable(
+  data %>% 
+    group_by(Ticker) %>% 
+    summarise(
+      Desvio = sd(Close),
+      CV     = sd(Close) / mean(Close) * 100,
+      Start = min(Date)
+    ) %>% 
+    arrange(CV)
+)
+```
+
+Podemos ver que el desvío estándar de una acción dice poco para la comparación, dado que estamos manejando escalas muy diferentes (cada acción se mueve en un rango de precio propio de la relación entre cantidad de acciones que hay en el mercado y la capitalización bursátil de una empresa, entre otros factores). Ante esa diferencia de los valores, se busca el coeficiente de variación (CV) para intentar comparar. Puede verse que las acciones tecnológicas (TSLA, NVDA, APPL, AMZN), tienen un CV considerablemente mayor que otras empresas de la economía real (como XOM -energética-, BRK-A -finanzas- y Visa -finanzas-).
+
+Este es un comportamiento usual del mercado financiero en las últimas décadas, siendo el producto de la estrategia de crecimiento, endeudamiento, ventas, reparto de dividendos y el riesgo de cada sector, entre otros. Para simplifcarlo: el sector de la tecnología es más cambiante y riesgoso fundamentalmente que el sector energético.
+
+Lo expresado en el CV, también se observará desde otras métricas que se utilizan en el análisis fundamental de las finanzas, que son la volatilidad histórica y el valor beta.
+
+#### Distribución del volumen
+
+Algunas otras formas de la estadística descriptiva para los datos no temporales carecen un poco de sentido en estos casos. Por ejemplo, el análisis de la distribución del volumen de una acción, no dirá nada muy revelador. Es lógico pensar que son pocos los días (de crisis o de euforia) donde particularmente se negocien más papeles de una empresa que la mayoría de los otros días; estos se tratan de días "outliers" para el mercado.
+
+```{r distribucion volumen, echo=FALSE}
+
+msft %>% 
+  ggplot(aes(x = Volume, fill = Ticker)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ Ticker, scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribución del Volumen por Ticker", x = "Volumen", y = "Frecuencia") 
+
+```
+
+#### Correlación
+
+Por otro lado, la correlación lineal entre el precio de una o varias acciones puede ser un indicador de cómo se desplaza el mercado y cómo se comporta entre sectores. Si bien cada empresa tiene su propia naturaleza, lógicamente están afectadas e influenciadas por el desarrollo de su sector y el vínculo del mismo con la macroeconomía. Por eso, es común ver análisis financieros centrados en sectores como bloques homogéneos de empresas y eso se respalda en cierta medida en el comportamiento de los valores.
+
+Usando una correlación lineal de Pearson, vemos que **hay una mayor correlación entre las empresas tecnológicas** (Apple, Microsofy y Google, por ejemplo), que entre las empresas de la economía real como Visa o Exxon.
+
+```{r corplot, echo=FALSE}
+data_pivot <- data_pivot %>% 
+  filter(year(Date) > 2017)
+
+corrplot.mixed(cor(data_pivot %>% select(-Date)), lower = "number", upper = "shade", tl.col = 'black')
+```
+
+Además de la fuerza de esta correlación, también podemos ver que **la correlación entre Microsoft y Apple tiene una forma lineal**, mientras que en el caso de la relación entre Microsfot y Exxon no se encuentra este patrón.
+
+```{r grafico corr lineal, echo=FALSE}
+msft_appl <- data_pivot %>% 
+  ggplot(aes(x = AAPL, y = MSFT)) +
+  geom_point() +
+  theme_cowplot()
+
+msft_xom <- data_pivot %>% 
+  ggplot(aes(x = XOM, y = MSFT)) +
+  geom_point() +
+  theme_cowplot()
+
+plot_grid(msft_appl, msft_xom)
+```
+
+Este comportamiento refuerza lo visto en el caso del CV, emparentando más a las empresas según su sector.
+
+### Volatilidad
+
+Previamente, se mencionó que, más allá de la varianza o el coeficiente de variación, la volatlidad histórica o el valor beta del precio de un activo son métricas más observadas en las finanzas.
+
+La volatilidad histórica mide la magnitud de los cambios en el precio de un activo financiero en el pasado. Se calcula a partir de la desviación estándar de los retornos diarios del activo financiero en un período determinado, generalmente un año. Por lo tanto, la volatilidad histórica es una medida retrospectiva de la volatilidad de un activo financiero.
+
+Por otro lado, el valor beta es una medida de la volatilidad relativa de un activo financiero en comparación con el mercado en general. Se calcula comparando los retornos del activo financiero con los retornos del mercado en un período determinado. Un valor beta de 1 indica que el activo financiero es tan volátil como el mercado en general. Un valor beta mayor que 1 indica que el activo financiero es más volátil que el mercado, mientras que un valor beta menor que 1 indica que el activo financiero es menos volátil que el mercado. En este caso, el índice tomado de referencia del mercado será el SP500.
+
+```{r volatilidad, echo=FALSE}
+calcular_volatilidad <- function(df) {
+  df <- df %>%
+    arrange(Date) %>%
+    mutate(Return = log(Close / lag(Close))) %>%
+    na.omit()
+
+  volatilidad <- df %>%
+    summarize(VolatilidadHistorica = sd(Return) * sqrt(252))
+
+  sp500 <- read.csv("https://query1.finance.yahoo.com/v7/finance/download/%5EGSPC?period1=946713600&period2=1938341200&interval=1d&events=history&includeAdjustedClose=true")
+  sp500 <- sp500 %>%
+    select(Date, Close) %>%
+    mutate(
+      Date        = as.Date(Date),
+      Close       = as.numeric(Close),
+      ReturnSP500 = log(Close / lag(Close))
+    ) %>%
+    na.omit()
+
+  data_sp500 <- left_join(df, sp500, by = "Date")
+
+  valor_beta <- data_sp500 %>%
+    summarize(ValorBeta = cov(Return, ReturnSP500) / var(ReturnSP500))
+
+  data.frame(Ticker = unique(df$Ticker), Volatilidad = volatilidad, ValorBeta = valor_beta)
+}
+
+data_volatilidad <- data %>%
+  group_split(Ticker) %>%
+  purrr::map_dfr(~calcular_volatilidad(.x))
+
+```
+
+Se generó una función `calcular_volatilidad` que calcula ambas métricas y se aplicó a cada una de las empresas en cuestión para toda la serie histórica. Además, esos resultados se unieron con otros datos para evaluar su relación, como el volumen medio o la fecha de inicio de cotización del activo.
+
+```{r data_volatilidad, echo=FALSE}
+data_volatilidad <- data_volatilidad %>% 
+  left_join(
+    data %>% 
+      group_by(Ticker) %>% 
+      summarise(VolumenMedio = mean(Volume)),
+    by = c ("Ticker")
+  ) %>% 
+  left_join(
+    data %>% 
+      group_by(Ticker) %>% 
+      summarise(Start = min(Date)),
+    by = c ("Ticker")
+  ) %>% 
+  arrange(VolatilidadHistorica)
+
+knitr::kable(
+  data_volatilidad
+)
+
+```
+
+```{r point volatilidad, echo=FALSE}
+data_volatilidad %>% 
+  ggplot(aes(x = VolumenMedio, y = VolatilidadHistorica)) +
+  geom_point() +
+  theme_minimal()
+```
+
+En este caso, **no puede apreciarse una relación directa** y lineal entre la volatilidad y el volumen de una empresa, aunque sí podemos ver que las dos empresas que más recientemente cotizan en el mercado, se encuentran entre las más volátiles. Un punto para la comprensión de este caso puede tener que ver con sus negocios, más que con el tiempo en la bolsa. Las tres empresas que más volatidad histórica han tenido (que son las mismas que tuvieron un valor beta más alto), son tres empresas de tecnologías disruptivas, innovadoras o arriesgadas: se tratan de Meta, Tesla y Nvidia.
+
+```{r barplot volatilidad, echo=FALSE}
+plot_ly(
+  data   = data_volatilidad %>% arrange(VolatilidadHistorica), 
+  x      = ~Ticker, 
+  y      = ~VolatilidadHistorica, 
+  type   = 'bar', 
+  name   = 'Volatilidad Histórica',
+  marker = list(color = 'royalblue3')
+  ) %>% 
+  add_trace(y = ~ValorBeta, name = 'Valor Beta', marker = list(color = 'red')) %>%
+  layout(yaxis = list(title = 'Volatilidad'), barmode = 'group') %>% 
+  layout(xaxis = list(categoryorder = "total ascending")) %>% 
+  layout(title = "Comparación de la volatilidad de cada acción")
+
+```
+
+### Serie de tiempo
+
+Al describir una serie temporal, se habla de tendencias, ciclos, estacionalidad y restos no explicados. Una serie temporal se puede descomponer en estas características.
+
+-   La **tendencia** existe cuando hay un aumento o disminución sostenido en los datos. En finanzas, se habla de tendencias de corto, mediano y largo plazo -los últimos también se pueden considerar como "ciclos"-. Un "cambio de dirección" de la tendencia puede darse cuando se pasa de una tendencia creciente ("alcista") a una tendencia decreciente ("bajista") o viceversa.
+-   **Estacionalidad**. Se trata de un patrón estacional ocurre cuando una serie de tiempo se ve afectada por factores estacionales como la época del año o el día de la semana. La estacionalidad es siempre de un período fijo y conocido.
+-   Un **ciclo** ocurre cuando los datos exhiben subidas y bajadas que no tienen una frecuencia fija. Estas fluctuaciones generalmente se deben a las condiciones económicas y, a menudo, están relacionadas con el "ciclo económico". La duración de estas fluctuaciones suele ser de al menos 2 años.
+
+Al elegir un método de pronóstico basado en series temporales, primero es necesario identificar los patrones de la series de tiempo en los datos y luego elegir un método que pueda capturar los patrones correctamente. En este caso, se utiliza el método de descomposición STL para identificar los componentes de la serie y se utilizará el metodo 'Prophet' (más adelante) para realizar predicciones.
+
+#### Tendencia de corto plazo
+
+Una tendencia de corto plazo en finanzas puede verse con pocos días. Graficando el último mes de la acción de Microsoft, se aprecia que la tendencia de la acción fue alcista, dado que el valor de la acción tendió a subir:
+
+```{r velas msft, echo=FALSE}
+msft %>% 
+  filter(Date >= as.Date(max(msft$Date))-31) %>% 
+  plot_ly(type = "candlestick",
+          x = ~Date, open = ~Open, high = ~High,
+          low = ~Low, close = ~Close, name = .$Ticker,
+          increasing = list(line = list(color = "green")),
+          decreasing = list(line = list(color = "red"))) %>%
+  layout(title = "Evolución del precio de MSFT en el último mes",
+         xaxis = list(title = "Fecha", rangeslider = list(visible = F)),
+         yaxis = list(title = "Precio")
+  )
+```
+
+En este caso, se utiliza un gráfico de velas, donde cada vela marca el precio de aperutra y cierre de la acción durante un día. Esta forma de visualizar el precio es la más utilizada en finanzas y sirve para el cortísimo plazo como para el largo plazo.
+
+#### Tendencia de largo plazo
+
+Observaremos la tendencia a largo plazo o el componente cíclico con gráficos de áreas:
+
+```{r ajustado, echo=FALSE, warning=FALSE}
+source(glue::glue('{path}/Funciones/facetado_ajustado.R'))
+
+facetado_ajustado(data = data, fecha_desde = '2018-04-04')
+```
+
+Particularmente, se visualiza la evolución a lo largo de 5 años del valor ajustado de las acciones. Se refiere al valor que se calcula para reflejar los cambios en el precio de una acción debido a eventos corporativos como dividendos, desdoblamientos de acciones o fusiones. Cuando se produce uno de estos eventos, el precio de la acción se ajusta para tener en cuenta el efecto del evento en el valor de la acción. El precio ajustado de la acción tiene en cuenta estos cambios y proporciona una imagen más precisa de su rendimiento a largo plazo.
+
+En estos gráficos, puede apreciarse que la mayoría de las acciones mostraron tendencias crecientes hasta fines de 2021 (destacando el colapso del COVID), pero viendo "correcciones" (descensos) del precio desde entonces. Es destacable que las acciones que mostraron valores betas o volatilidades históricas más altas, son las que más ven pronunciado el descenso de sus precios en el último año.
+
+#### Estacionalidad
+
+Los cambios estacionales son aquellos que están asociados con algún aspecto del calendario, que se repiten de manera altamente confiable en el mismo lapso de tiempo. Para observar eso, se utilizan gráficos estacionales, similar a una gráfica de tiempo, excepto que los datos se grafican contra las "estaciones" individuales en las que se observaron los datos. Busca el patrón estacional subyacente e identificar los años en los que cambia.
+
+```{r estacional, echo=FALSE}
+ggplotly(
+  msft %>% 
+    tsibble(index = "Date") %>% 
+    filter(Date > '2017-12-31') %>% 
+    tsibble::fill_gaps() %>% 
+    tidyr::fill(Adjusted, .direction = "down") %>% 
+    gg_season(Adjusted, labels = "both", na.rm = TRUE) +
+    labs(y = "Valor ajustado", title = "Gráfico estacional", subtitle = 'MSFT')
+)
+```
+
+En este caso, se grafica cada año por separado la evolución del precio de MSFT. Si bien no hay un patrón estacional claro, pueden verse años que presentan comportamientos parecidos: en 4 de 5 años, pueden verse crecimientos desde fines de mayo hasta agosto y otro crecimiento similar de noviembre a diciembre. La única excepción se produce en 2022, producto de la corrección tras los altos aumentos de 2021 y de la guerra de Ucrania.
+
+Estos datos coinciden con dos fenómenos conocidos popularmente en finanzas como "[Sell in May](https://www.fool.com/investing/2023/05/04/before-you-sell-in-may-and-go-away-think/#:~:text=If%20you've%20been%20in,well%20sit%20these%20months%20out)" y el "[rally Navideño](https://admiralmarkets.com/es/education/articles/shares/rally-navidad)".
+
+#### Autocorrelación
+
+Así como la correlación mide el alcance de una relación lineal entre dos variables, la autocorrelación mide la relación lineal entre los valores atrasados de una misma serie de tiempo.
+
+Cuando los datos tienen una tendencia, las autocorrelaciones para pequeños retrasos tienden a ser grandes y positivas porque las observaciones cercanas en el tiempo también tienen un valor cercano. Entonces, el ACF de una serie de tiempo con tendencia tiende a tener valores positivos que disminuyen lentamente a medida que aumentan los retrasos. Cuando los datos son estacionales, las autocorrelaciones serán mayores para los retrasos estacionales (en múltiplos del período estacional) que para otros retrasos.
+
+```{r}
+ggplotly(
+  data_pivot %>%
+    as_tsibble(index = Date) %>%
+    tsibble::fill_gaps() %>% 
+    ACF(MSFT, lag_max = 52, type = "correlation", na.action = na.pass) %>% 
+    autoplot()+
+    labs(title = "Autocorrelacion de MSFT", x = "Atraso de 1 día, por 52 días", y = "Autocorrelación")
+)
+
+```
+
+En el caso de Microsoft, claramente hay una alta correlación de un día al siguiente. Esto es más que lógico, dado que la cotización de cada día abre relativamente en el mismo nivel que cerró el día anterior (son muy extraños los casos en los que hay una diferencia amplia).
+
+#### Descomposición
+
+La tendencia y la estacionalidad vistas por separado en los casos anteriores, se expresan más clara y concretamente en la descomposición de la serie temporal. En este caso, se utliza el método STL, un método versátil y robusto para descomponer series de tiempo. STL es un acrónimo de "Descomposición estacional y de tendencias usando Loess", mientras que Loess es un método para estimar relaciones no lineales.
+
+```{r descomposicion, echo=FALSE, message=FALSE}
+msft_ts <- msft %>% 
+  tsibble(index = Date) %>% 
+  filter(Date > '2018-10-01') %>% 
+  select(Date, Ticker, Adjusted) 
+
+
+#Esto forma un "dable", el tipo de df descompuesto
+# Donde Adjusted mantiene el valor original
+# Y las otras columnas son los componentes estimados
+dcmp_msft <- msft_ts %>% 
+  tsibble::fill_gaps() %>% 
+  tidyr::fill(Adjusted, .direction = "down") %>%
+  model(stl = STL(Adjusted ~ trend(window = 21), robust = TRUE))
+components(dcmp_msft) %>% 
+  autoplot() +
+  labs(title = "Descomposición de la serie de tiempo de MSFT", subtitle = "Tendencia, estacionalidad y resto")
+
+```
+
+Esta descomposición permite ver más claramente los elementos vistos previamente. Se observa:
+
+1.  El primer gráfico es la evolución simple del precio ajustado
+
+2.  El segundo presenta la tendencia creciente hasta fines de 2021 y la corrección posterior de 2022.
+
+3.  En el tercer gráfico, de estacionalidad anual, se ven más claramente los crecimientos de mitad de año y los de final de año.
+
+4.  El cuarto gráfico muestra una estacionalidad dentro de la semana poco relavante.
+
+5.  El quinto gráfico es importante: muestra el resto del comportamiento de la acción que no se puedo explicar por la tendencia o la estacionalidad. Una barra gris grande en el panel inferior muestra que la variación en el componente restante es menor en comparación con la variación en los datos. En el caso del valor restante, la barra gris es chica, signifcando que hay un ruido considerable que el modelo STL no logra explicar, algo lógico y esperado dada la subjetividad y la variabilidad del tema en cuestión.
+
+#### Fuerza de la tendencia y la estacionalidad
+
+Se puede utilizar una descomposición para medir la fuerza de la tendencia y la estacionalidad en una serie temporal. Para datos con tendencias fuertes, los datos ajustados estacionalmente (es decir, a los que se les saca el factor de la estacionalidad) deberían tener mucha más variación que el componente restante (es decir, hay más influencia de la tendencia que de lo no explicado). Las fuerzas de la tendencia y de la estacionalidad se definen entre 0 y 1. Una serie con fuerza estacional (FS) cerca de 0 casi no exhibe estacionalidad, mientras que una serie con fuerte estacionalidad tendrá (FS) cerca de 1.
+
+```{r fuerza, echo=FALSE}
+knitr::kable(
+  msft %>% 
+    as_tsibble(index = Date) %>% 
+  filter(Date > '2018-10-01') %>% 
+    select(Date, Ticker, Adjusted) %>%
+    features(Adjusted, feat_stl, s.window = "periodic", .period = 12) %>%
+    select(1:2)
+)
+
+```
+
+En este caso, se ve una alta fuerza tendencial y un efecto estacional no muy marcado.
+
+### Modelos
+
+#### Prophet
+
+El análisis de series de tiempo precede a un intento predictivo a realizar con un modelo 'Prophet'. Prophet es un modelo desarrollado por la empresa Facebook y pertenece a la familia de los modelos aditivos generalizados (GAM). Prophet permite hacer una descomposición de la serie de tiempo en términos aditivos como la estudiada en este trabajo, considerando la estacionalidad del fenómeno en diferentes niveles de tiempo, la tendencia general y el componente de error. Una de las ventajas que presenta Prophet es que permite incluir en el modelado la detección de anomalías en la serie de tiempo, para controlar eventos inesperados.
+
+Este capacidad de adaptarse a eventos especiales y ser más robusto ante cambios bruscos hace de Prophet un modelo más adecuado que otros tradiconales (como ARIMA), que tienen una mayor dependencia de que los datos sean lineales, algo difícil de encontrar en datos financieros volátiles. En general, esto se traduce a que Prophet tiene errores considerablemente menores que un modelo ARIMA, mostrando mayor flexibilidad para ajustarse a datos complejos de muy corto plazo, pero con ARIMA mostrando una mejor captación general del proceso en períodos más prolongados.
+
+Para entrenar un modelo Prophet, se necesitán los datos ya obtenidos de cada día de cotización, así como un data.frame que contemple eventos especiales para acoplarse a la flexiblidad del modelo. En la próxima etapa de entrega, se adicionará un data.frame con estos períodos especiales.
+
+#### Red neuronal
+
+Las redes neuronales se intentan utilizar en reiteradas oportunidades para predecir el valor futuro de una acción. Varios artículos se han encontrado con su mala performance predictiva, dada la volatilidad e impredictibilidad del mercado, altamente afectada por el ánimo de los mercados. Se buscará entrenar una red LSTM o un modelo de autorregresión de red neuronal (NNAR) que prediga el resultado de un solo día futuro para una serie de tiempo.
+
+#### Estrategia de trading
+
+Finalmente, se automatizará un sistema de alertas basada en el sistema de trading Ichimoku, que integra indicadores técnicos y gráficos para intentar anticiparse a la tendencia de corto plazo de una acción. Este sistema se compone de especies de medias móviles ponderadas y establece reglas de decisión en función de la relación de estas métricas. Sus resultados serán validados con un experto en trading basado en este sistema para tomar como benchmark y comparar con los rendimientos que se podrían haber generado con los dos modelos predictivos anteriores.
+
+## Bibliografía
+
+Hyndman, R. J., & Athanasopoulos, G. (2021). Pronósticos: principios y práctica (3.ª ed.). OTexts: Melbourne, Australia. Recuperado de <http://OTexts.com/fpp3>
+
+Cleveland, R. B., Cleveland, W. S., McRae, J. E., & Terpenning, I. J. (1990). STL: Un procedimiento de descomposición de tendencia estacional basado en loess. Diario de Estadísticas Oficiales, 6(1), 3--33. <http://bit.ly/stl1990>
+
+Before You "Sell in May and Go Away," Here's Why You Should Think Again. (s. f.). The Motley Fool. Recuperado de <https://bit.ly/3ME63rl>
+
+¿Qué es el Rally de Navidad en Bolsa? ¿Cómo aprovecharlo? (s. f.). Admiral Markets. Recuperado de <https://bit.ly/3IIJXTo>
+
+Facebook. (s. f.). Prophet. Forecasting at scale. Recuperado de <https://bit.ly/3MHwU5Q>
+
+Chan, D., Badano, C. I., & Rey, A. A. (s. f.). Análisis inteligente de datos con lenguaje R: con aplicaciones a imágenes.
+
+Neural Networks: Forecasting Profits. (s. f.). Investopedia. Recuperado de <https://bit.ly/3MXWrsO>
+
+Granger, C. W., & Ramanathan, R. (1984). Forecasting stock indices: A comparison of classification and level estimation models. Journal of Forecasting, 3(2), 173--181. <https://doi.org/10.1002/for.3980030205>
+
+Qiu, M., & Song, Y. (2016). Predicting the Direction of Stock Market Index Movement Using an Optimized Artificial Neural Network Model. PLoS ONE, 11(5), e0155133. <https://doi.org/10.1371/journal.pone.0155133>
